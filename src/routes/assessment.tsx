@@ -5,9 +5,16 @@ import { CameraView } from "@/components/als/CameraView";
 import { AudioWaveform } from "@/components/als/AudioWaveform";
 import { useMediaStream } from "@/hooks/useMediaStream";
 import { getTask, ARCHITECTURES } from "@/lib/als/tasks";
-import { setSession, useSession } from "@/lib/als/session";
-import { buildSequence, type Landmarks68 } from "@/lib/als/landmarks";
+import { setSession, saveCapture, useSession } from "@/lib/als/session";
+import { buildSequence, type Landmarks68 as AlsLandmarks68 } from "@/lib/als/landmarks";
 import { ResearchDisclaimer } from "@/components/als/Disclaimers";
+import { useFaceLandmarks, type Landmarks68 as HookLandmarks68 } from "@/hooks/useFaceLandmarks";
+import { useSpeechFeatures } from "@/hooks/useSpeechFeatures";
+
+/** Convert hook's [number,number][] to the {x,y}[] shape used by als/landmarks. */
+function toAlsLandmarks(pts: HookLandmarks68): AlsLandmarks68 {
+  return pts.map(([x, y]) => ({ x, y }));
+}
 
 export const Route = createFileRoute("/assessment")({
   head: () => ({
@@ -38,15 +45,18 @@ function AssessmentPage() {
   const session = useSession();
   const task = getTask(session.taskId);
   const arch = ARCHITECTURES[task.architecture];
-  const { stream, camera, mic, error, enableCamera, enableMic } = useMediaStream();
+  const { stream, camera, mic, error: mediaError, enableCamera, enableMic } = useMediaStream();
+
+  const face = useFaceLandmarks();
+  const speech = useSpeechFeatures();
 
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [complete, setComplete] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const framesRef = useRef<Landmarks68[]>([]);
   const startRef = useRef(0);
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     void enableCamera();
@@ -59,14 +69,17 @@ function AssessmentPage() {
     return () => window.clearInterval(id);
   }, [recording]);
 
-  const onFrame = useCallback((l: Landmarks68) => {
-    if (recorderRef.current?.state === "recording") framesRef.current.push(l);
+  const handleVideoReady = useCallback((el: HTMLVideoElement | null) => {
+    videoElRef.current = el;
   }, []);
 
   const start = () => {
     if (!stream) return;
+
+    face.reset();
+    speech.reset();
+
     chunksRef.current = [];
-    framesRef.current = [];
     let rec: MediaRecorder;
     try {
       rec = new MediaRecorder(stream);
@@ -83,7 +96,7 @@ function AssessmentPage() {
         hasRecording: true,
         recordingUrl: url,
         recordingDurationMs: Date.now() - startRef.current,
-        sequence: buildSequence(framesRef.current, 20),
+        sequence: buildSequence(face.frames.map((f) => toAlsLandmarks(f.normalisedLandmarks)), 20),
       });
       setComplete(true);
     };
@@ -93,9 +106,39 @@ function AssessmentPage() {
     setComplete(false);
     rec.start();
     setRecording(true);
+
+    // Start real extractions after MediaRecorder is running
+    if (videoElRef.current) {
+      face.start(videoElRef.current);
+    }
+    void speech.start();
   };
 
   const stop = () => {
+    face.stop();
+    speech.stop();
+
+    // Compute speech summary from the data available at stop time
+    const validPitches = speech.frames.map((f) => f.pitchHz).filter((p): p is number => p !== null);
+    const meanPitchHz = validPitches.length > 0
+      ? validPitches.reduce((a, b) => a + b, 0) / validPitches.length
+      : null;
+
+    saveCapture({
+      taskId: task.id,
+      landmarkFrameCount: face.frames.length,
+      sequence: face.frames.map((f) => toAlsLandmarks(f.normalisedLandmarks)),
+      speech: {
+        ddkRateHz: speech.ddkSummary.rateHz,
+        peakCount: speech.ddkSummary.peakCount,
+        rhythmVariability: speech.ddkSummary.rhythmVariability,
+        meanPitchHz,
+        speechFrameCount: speech.frames.length,
+      },
+      durationMs: Date.now() - startRef.current,
+      capturedAt: Date.now(),
+    });
+
     recorderRef.current?.stop();
     setRecording(false);
   };
@@ -105,6 +148,9 @@ function AssessmentPage() {
     setElapsed(0);
     setSession({ hasRecording: false, sequence: [], recordingDurationMs: 0 });
   };
+
+  // Combine all errors for display (reuse existing error-display pattern)
+  const hookErrors = [face.error, speech.error].filter(Boolean).join(" · ");
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -123,7 +169,13 @@ function AssessmentPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="surface-card p-4">
-          <CameraView stream={stream} onFrame={onFrame} overlayLabel={recording ? "REC" : undefined} />
+          <CameraView
+            stream={stream}
+            frame={face.frames.length > 0 ? face.frames[face.frames.length - 1] : null}
+            overlayLabel={recording ? "REC" : undefined}
+            statusLabel={face.isModelLoading ? "Loading model…" : undefined}
+            onVideoReady={handleVideoReady}
+          />
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {!recording ? (
               <button
@@ -156,9 +208,14 @@ function AssessmentPage() {
               </button>
             )}
           </div>
-          {error && (
+          {mediaError && (
             <p className="mt-3 rounded-lg border border-destructive/40 bg-destructive/8 px-3 py-2 text-sm text-destructive">
-              {error}
+              {mediaError}
+            </p>
+          )}
+          {hookErrors && (
+            <p className="mt-3 rounded-lg border border-destructive/40 bg-destructive/8 px-3 py-2 text-sm text-destructive">
+              {hookErrors}
             </p>
           )}
           {(camera !== "granted" || mic !== "granted") && (
@@ -177,7 +234,7 @@ function AssessmentPage() {
           <section className="surface-card p-6">
             <p className="mono-label">Current Task</p>
             <h2 className="mt-1 font-mono text-lg font-semibold">{task.id}</h2>
-            <p className="mt-2 text-sm font-medium">“{task.instruction}”</p>
+            <p className="mt-2 text-sm font-medium">"{task.instruction}"</p>
             <p className="mt-2 text-sm text-muted-foreground">{task.purpose}</p>
             <p className="mt-3 font-mono text-xs text-muted-foreground">{arch.name} · {arch.prior}</p>
           </section>

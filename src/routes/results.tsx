@@ -100,8 +100,8 @@ function ResultsPage() {
 
       <section className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
         <div className="surface-card p-5 xl:col-span-1">
-          <p className="mono-label">Assessment Indicator</p>
-          <p className="mt-1 text-xl font-semibold">Demo / Simulated</p>
+          <p className="mono-label">Classification Output</p>
+          <p className="mt-1 text-sm font-medium text-muted-foreground">Model inference not yet connected</p>
           <p className="mt-1 text-xs text-muted-foreground">No clinical interpretation is provided.</p>
         </div>
         <MetricCard label="Sensitivity" value={`${COHORT_METRICS.sensitivity}%`} note="Reported in paper" />
@@ -283,14 +283,27 @@ function ResultsPage() {
       <section className="mt-10 surface-card p-6">
         <h2 className="text-xl font-semibold tracking-tight">Assessment Summary</h2>
         <dl className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            ["Task", task.id],
-            ["Input", "Webcam + Microphone"],
-            ["Representation", "68-point facial landmarks"],
-            ["Sequence", "20 frames"],
-            ["Architecture", arch.name],
-            ["Result", "Demo / Simulated"],
-          ].map(([k, v]) => (
+          {((): Array<[string, string]> => {
+            const cap = session.captures[task.id];
+            const isDDK = task.id.startsWith("DDK");
+            const rows: Array<[string, string]> = [
+              ["Task", task.id],
+              ["Input", "Webcam + Microphone"],
+              ["Representation", "68-point facial landmarks"],
+              ["Frames captured", cap ? String(cap.landmarkFrameCount) : "—"],
+              ["Architecture", arch.name],
+              ["Classification", "Model inference not yet connected"],
+            ];
+            if (isDDK && cap?.speech) {
+              rows.push(
+                ["DDK Rate (Hz)", cap.speech.ddkRateHz.toFixed(2)],
+                ["Syllable peaks", String(cap.speech.peakCount)],
+                ["Rhythm variability", cap.speech.rhythmVariability != null ? cap.speech.rhythmVariability.toFixed(3) : "—"],
+                ["Mean pitch (Hz)", cap.speech.meanPitchHz != null ? cap.speech.meanPitchHz.toFixed(1) : "—"],
+              );
+            }
+            return rows;
+          })().map(([k, v]) => (
             <div key={k} className="flex items-center justify-between gap-3 rounded-lg border bg-surface px-4 py-3 text-sm">
               <dt className="text-muted-foreground">{k}</dt>
               <dd className="text-right font-mono font-medium">{v}</dd>
