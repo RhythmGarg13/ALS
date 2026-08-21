@@ -9,6 +9,8 @@
 import { useSyncExternalStore } from "react";
 import type { Landmarks68 } from "./landmarks";
 import type { DemoResult } from "./mock-results";
+import type { LiveResult } from "./api";
+
 
 export type SpeechSummary = {
   ddkRateHz: number;
@@ -34,7 +36,8 @@ export type SessionState = {
   hasRecording: boolean;
   sequence: Landmarks68[]; // (20, 68, 2)
   captures: Record<string, TaskCapture>;
-  result: DemoResult | null;
+  /** null = no analysis run yet; DemoResult = mock run; LiveResult = real API run */
+  result: DemoResult | LiveResult | null;
 };
 
 const initial: SessionState = {
