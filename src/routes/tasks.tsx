@@ -4,6 +4,9 @@ import { ARCHITECTURES, TASKS, type ClinicalTask } from "@/lib/als/tasks";
 import { setSession, useSession } from "@/lib/als/session";
 import { ResearchDisclaimer } from "@/components/als/Disclaimers";
 
+const DEMO_CAPTION =
+  "Illustrative pairing for this demo only — all four models are trained on all nine tasks pooled together in the actual research pipeline.";
+
 export const Route = createFileRoute("/tasks")({
   head: () => ({
     meta: [
@@ -47,6 +50,9 @@ function TaskCard({ task, selected, onSelect }: { task: ClinicalTask; selected: 
         <div className="flex justify-between gap-3">
           <dt className="text-muted-foreground">Architecture</dt>
           <dd className="text-right font-mono font-medium">{arch.name}</dd>
+        </div>
+        <div className="col-span-full">
+          <p className="text-[10px] text-muted-foreground">{DEMO_CAPTION}</p>
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-muted-foreground">Prior</dt>

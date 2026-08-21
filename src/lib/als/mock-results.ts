@@ -1,12 +1,12 @@
 /**
  * Mock / demonstration results.
  *
- * IMPORTANT: nothing here is a prediction. Values are fixed demonstration
- * figures taken from the ALS-NET paper's reported cohort-level metrics,
- * plus deterministic synthetic curves used only for visualisation.
+ * IMPORTANT: nothing here is a prediction. Values are illustrative placeholder
+ * figures for demonstration purposes only — they are NOT yet-published results
+ * from the ALS-NET research paper (LOSO evaluation has not been completed yet).
  *
  * To connect a real backend later, replace `runAnalysis()` with a call to a
- * Python/PyTorch inference API that accepts the (20, 68, 2) tensor.
+ * Python/PyTorch inference API that accepts the (15, 68, 6) model-feature tensor.
  */
 import { ARCHITECTURES, getTask } from "./tasks";
 import type { ArchitectureId } from "./tasks";
@@ -25,7 +25,11 @@ export type DemoResult = {
   symmetryDifference: number;
 };
 
-/** Cohort-level demonstration metrics reported in the research paper. */
+/**
+ * Illustrative placeholder cohort-level metrics for demonstration purposes only.
+ * These are NOT yet-published results — LOSO evaluation has not been run yet.
+ * Do not present these as findings from the research paper.
+ */
 export const COHORT_METRICS = {
   sensitivity: 88.9,
   specificity: 86.4,

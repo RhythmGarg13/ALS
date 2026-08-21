@@ -30,6 +30,9 @@ export function ArchitectureCards({ highlight }: { highlight?: ArchitectureId })
 
             <p className="mono-label mt-5">Best suited for</p>
             <p className="font-mono text-sm font-medium">{a.bestFor}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Illustrative pairing for this demo only — all four models are trained on all nine tasks pooled together in the actual research pipeline.
+            </p>
 
             <ol className="mt-4 space-y-1.5 border-t pt-4">
               {a.stages.map((s, i) => (

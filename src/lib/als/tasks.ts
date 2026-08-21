@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Smile, Wind, Heart, MoveHorizontal, AudioLines, Repeat, MessageSquareQuote } from "lucide-react";
+import { Smile, Wind, Heart, MoveHorizontal, AudioLines, Repeat, MessageSquareQuote, Maximize2, ArrowUpFromLine } from "lucide-react";
 
 export type ArchitectureId = "siamese" | "bigru" | "stgcn";
 
@@ -133,6 +133,26 @@ export const TASKS: ClinicalTask[] = [
     architecture: "bigru",
     icon: MessageSquareQuote,
     durationHint: "≈ 6 s",
+  },
+  {
+    id: "NSM_OPEN",
+    category: "non-speech",
+    categoryLabel: "Non-Speech Movement",
+    instruction: "Open your mouth as wide as comfortably possible.",
+    purpose: "Evaluates jaw range of motion.",
+    architecture: "stgcn",
+    icon: Maximize2,
+    durationHint: "\u2248 5 s",
+  },
+  {
+    id: "NSM_BROW",
+    category: "non-speech",
+    categoryLabel: "Non-Speech Movement",
+    instruction: "Raise your eyebrows as high as possible.",
+    purpose: "Evaluates upper-face range of motion and symmetry.",
+    architecture: "siamese",
+    icon: ArrowUpFromLine,
+    durationHint: "\u2248 5 s",
   },
 ];
 

@@ -42,7 +42,10 @@ function normaliseLandmarks(lm: Landmarks68, bbox: BBox): Landmarks68 {
 
 export function useFaceLandmarks(options: UseFaceLandmarksOptions = {}): UseFaceLandmarksResult {
   const {
-    modelUrl = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights/",
+    // Weights are self-hosted in public/models/ to avoid CDN dependency during live demos.
+    // CDN fallback (document-only, not used by default):
+    //   https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights/
+    modelUrl = "/models",
     intervalMs = 66,
   } = options;
 

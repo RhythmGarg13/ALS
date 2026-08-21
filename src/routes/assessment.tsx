@@ -6,15 +6,30 @@ import { AudioWaveform } from "@/components/als/AudioWaveform";
 import { useMediaStream } from "@/hooks/useMediaStream";
 import { getTask, ARCHITECTURES } from "@/lib/als/tasks";
 import { setSession, saveCapture, useSession } from "@/lib/als/session";
-import { buildSequence, type Landmarks68 as AlsLandmarks68 } from "@/lib/als/landmarks";
+import {
+  buildSequence,
+  buildMotionFeatures,
+  edgePadOrTruncate,
+  bboxNormFrame,
+  type Landmarks68 as AlsLandmarks68,
+  type BBox as AlsBBox,
+} from "@/lib/als/landmarks";
 import { ResearchDisclaimer } from "@/components/als/Disclaimers";
-import { useFaceLandmarks, type Landmarks68 as HookLandmarks68 } from "@/hooks/useFaceLandmarks";
+import { useFaceLandmarks, type Landmarks68 as HookLandmarks68, type BBox as HookBBox } from "@/hooks/useFaceLandmarks";
 import { useSpeechFeatures } from "@/hooks/useSpeechFeatures";
 
 /** Convert hook's [number,number][] to the {x,y}[] shape used by als/landmarks. */
 function toAlsLandmarks(pts: HookLandmarks68): AlsLandmarks68 {
   return pts.map(([x, y]) => ({ x, y }));
 }
+
+/** Convert hook's BBox to als/landmarks BBox (same [xmin,ymin,xmax,ymax] tuple). */
+function toAlsBBox(bbox: HookBBox): AlsBBox {
+  return bbox as AlsBBox;
+}
+
+const DEMO_CAPTION =
+  "Illustrative pairing for this demo only — all four models are trained on all nine tasks pooled together in the actual research pipeline.";
 
 export const Route = createFileRoute("/assessment")({
   head: () => ({
@@ -58,6 +73,16 @@ function AssessmentPage() {
   const startRef = useRef(0);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
 
+  // Holds the data built synchronously in stop() so that onstop can safely read
+  // it without a stale closure on face.frames.
+  const pendingRef = useRef<{
+    displaySequence: AlsLandmarks68[];
+    rawSequence: AlsLandmarks68[];
+    modelFeatures: number[][][] | null;
+    featureMask: number[] | null;
+    durationMs: number;
+  } | null>(null);
+
   useEffect(() => {
     void enableCamera();
     void enableMic();
@@ -92,11 +117,17 @@ function AssessmentPage() {
     rec.onstop = () => {
       const blob = new Blob(chunksRef.current, { type: rec.mimeType || "video/webm" });
       const url = URL.createObjectURL(blob);
+
+      // Read from pendingRef — built synchronously in stop() where face.frames is fresh.
+      // Do NOT re-read face.frames here: the onstop closure was created in start() and
+      // would capture a stale (empty) reference to face.frames.
+      const pending = pendingRef.current;
       setSession({
         hasRecording: true,
         recordingUrl: url,
-        recordingDurationMs: Date.now() - startRef.current,
-        sequence: buildSequence(face.frames.map((f) => toAlsLandmarks(f.normalisedLandmarks)), 20),
+        recordingDurationMs: pending?.durationMs ?? 0,
+        sequence: pending?.rawSequence ?? [],
+        displaySequence: pending?.displaySequence ?? [],
       });
       setComplete(true);
     };
@@ -118,16 +149,41 @@ function AssessmentPage() {
     face.stop();
     speech.stop();
 
-    // Compute speech summary from the data available at stop time
+    // Build sequences synchronously here — face.frames is fresh at stop() time.
+    const rawAlsFrames = face.frames.map((f) => toAlsLandmarks(f.normalisedLandmarks));
+    const rawBBoxes = face.frames.map((f) => toAlsBBox(f.bbox));
+
+    // Display sequence: uniformly resampled 20-frame display-only sequence.
+    const displaySequence = buildSequence(rawAlsFrames, 20);
+
+    // Model feature tensor: (T, 68, 6) from TRUE frames, then edge-pad to 15.
+    // The hook already stores per-frame bbox-normalised landmarks in normalisedLandmarks,
+    // so we re-normalise each frame using its own stored bbox to match Python exactly.
+    const bboxNormed = face.frames.map((f, i) =>
+      bboxNormFrame(toAlsLandmarks(f.rawLandmarks), rawBBoxes[i]!),
+    );
+    const motionFeatures = buildMotionFeatures(bboxNormed);
+    const { padded: paddedFeatures, mask: featureMask } = edgePadOrTruncate(motionFeatures);
+
+    pendingRef.current = {
+      displaySequence,
+      rawSequence: rawAlsFrames,
+      modelFeatures: paddedFeatures.length > 0 ? (paddedFeatures as number[][][]) : null,
+      featureMask: featureMask.length > 0 ? featureMask : null,
+      durationMs: Date.now() - startRef.current,
+    };
+
+    // Compute speech summary
     const validPitches = speech.frames.map((f) => f.pitchHz).filter((p): p is number => p !== null);
-    const meanPitchHz = validPitches.length > 0
-      ? validPitches.reduce((a, b) => a + b, 0) / validPitches.length
-      : null;
+    const meanPitchHz =
+      validPitches.length > 0 ? validPitches.reduce((a, b) => a + b, 0) / validPitches.length : null;
 
     saveCapture({
       taskId: task.id,
       landmarkFrameCount: face.frames.length,
-      sequence: face.frames.map((f) => toAlsLandmarks(f.normalisedLandmarks)),
+      sequence: rawAlsFrames,
+      modelFeatures: pendingRef.current.modelFeatures,
+      featureMask: pendingRef.current.featureMask,
       speech: {
         ddkRateHz: speech.ddkSummary.rateHz,
         peakCount: speech.ddkSummary.peakCount,
@@ -135,7 +191,7 @@ function AssessmentPage() {
         meanPitchHz,
         speechFrameCount: speech.frames.length,
       },
-      durationMs: Date.now() - startRef.current,
+      durationMs: pendingRef.current.durationMs,
       capturedAt: Date.now(),
     });
 
@@ -146,7 +202,8 @@ function AssessmentPage() {
   const retake = () => {
     setComplete(false);
     setElapsed(0);
-    setSession({ hasRecording: false, sequence: [], recordingDurationMs: 0 });
+    pendingRef.current = null;
+    setSession({ hasRecording: false, sequence: [], displaySequence: [], recordingDurationMs: 0 });
   };
 
   // Combine all errors for display (reuse existing error-display pattern)
@@ -237,6 +294,7 @@ function AssessmentPage() {
             <p className="mt-2 text-sm font-medium">"{task.instruction}"</p>
             <p className="mt-2 text-sm text-muted-foreground">{task.purpose}</p>
             <p className="mt-3 font-mono text-xs text-muted-foreground">{arch.name} · {arch.prior}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">{DEMO_CAPTION}</p>
           </section>
 
           <section className="surface-card p-6">

@@ -176,27 +176,27 @@ function ResultsPage() {
         <MetricCard
           label="Sensitivity"
           value={`${cohortMetrics.sensitivity}%`}
-          note="Reported in paper"
+          note="Illustrative placeholder — demonstration only"
         />
         <MetricCard
           label="Specificity"
           value={`${cohortMetrics.specificity}%`}
-          note="Reported in paper"
+          note="Illustrative placeholder — demonstration only"
         />
         <MetricCard
           label="F1 Score"
           value={`${cohortMetrics.f1}%`}
-          note="Reported in paper"
+          note="Illustrative placeholder — demonstration only"
         />
         <MetricCard
           label="AUC-ROC"
           value={cohortMetrics.auc.toFixed(3)}
-          note="Reported in paper"
+          note="Illustrative placeholder — demonstration only"
         />
       </section>
       <p className="mt-3 text-xs text-muted-foreground">
-        These are cohort-level values from the research paper. They do not describe the person in front of
-        the camera.
+        These are illustrative placeholder values for demonstration purposes only — they do not reflect
+        published results and do not describe the person in front of the camera.
       </p>
 
       {/* ── Task-specific visualisation ────────────────────────────────────── */}
@@ -387,7 +387,8 @@ function ResultsPage() {
       </section>
 
       <div className="mt-10">
-        <KinematicPlayer sequence={session.sequence} />
+        {/* displaySequence is the 20-frame display-only scrubber sequence built in stop(). */}
+        <KinematicPlayer sequence={session.displaySequence} />
       </div>
 
       <section className="mt-10">
@@ -447,7 +448,7 @@ function ResultsPage() {
         <div className="mt-5 flex flex-wrap gap-2">
           <button
             onClick={() => {
-              setSession({ result: null, hasRecording: false, sequence: [] });
+              setSession({ result: null, hasRecording: false, sequence: [], displaySequence: [], recordingDurationMs: 0 });
               void navigate({ to: "/tasks" });
             }}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"

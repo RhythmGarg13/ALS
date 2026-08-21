@@ -4,7 +4,7 @@
  * Holds the demo session state (selected task, recording metadata, captured
  * landmark/speech features). Everything stays in this browser tab — no
  * backend, no upload. A Python/PyTorch service can later consume the exact
- * same `(20, 68, 2)` tensor plus the speech summary.
+ * same `(15, 68, 6)` model-feature tensor plus the speech summary.
  */
 import { useSyncExternalStore } from "react";
 import type { Landmarks68 } from "./landmarks";
@@ -23,7 +23,11 @@ export type SpeechSummary = {
 export type TaskCapture = {
   taskId: string;
   landmarkFrameCount: number;
-  sequence: Landmarks68[]; // (20, 68, 2)
+  sequence: Landmarks68[]; // raw captured frames (display-only, variable length)
+  /** Model-input tensor (15, 68, 6): centered, velocity, asymmetry channels. null if not yet computed. */
+  modelFeatures: number[][][] | null;
+  /** Parallel mask for modelFeatures: 1.0 = real frame, 0.0 = edge-padded. */
+  featureMask: number[] | null;
   speech: SpeechSummary | null;
   durationMs: number;
   capturedAt: number;
@@ -34,7 +38,10 @@ export type SessionState = {
   recordingDurationMs: number;
   recordingUrl: string | null;
   hasRecording: boolean;
-  sequence: Landmarks68[]; // (20, 68, 2)
+  /** Display-only sequence for KinematicPlayer (variable-length, bbox-normalised {x,y}). */
+  sequence: Landmarks68[];
+  /** Same sequence resampled to 20 frames for the scrubber display. */
+  displaySequence: Landmarks68[];
   captures: Record<string, TaskCapture>;
   /** null = no analysis run yet; DemoResult = mock run; LiveResult = real API run */
   result: DemoResult | LiveResult | null;
@@ -46,6 +53,7 @@ const initial: SessionState = {
   recordingUrl: null,
   hasRecording: false,
   sequence: [],
+  displaySequence: [],
   captures: {},
   result: null,
 };

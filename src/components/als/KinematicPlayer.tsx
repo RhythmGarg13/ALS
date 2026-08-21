@@ -9,20 +9,37 @@ function fallbackSequence(): Landmarks68[] {
   );
 }
 
-/** Frame-by-frame playback of the (20, 68, 2) kinematic sequence. */
+/**
+ * Frame-by-frame playback of the captured kinematic sequence.
+ * When sequence.length === 0 (no recording made yet), uses a deterministic
+ * synthetic face as a placeholder and shows a visible "Synthetic preview" label.
+ */
 export function KinematicPlayer({ sequence }: { sequence: Landmarks68[] }) {
-  const frames = sequence.length === 20 ? sequence : fallbackSequence();
+  // Only use fallback when there is truly no capture yet (length 0).
+  // A real recording may have any number of frames.
+  const isSynthetic = sequence.length === 0;
+  const frames = isSynthetic ? fallbackSequence() : sequence;
+  const totalFrames = frames.length;
+
   const [frame, setFrame] = useState(1);
   const [playing, setPlaying] = useState(true);
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
     if (!playing) return;
-    timer.current = window.setInterval(() => setFrame((f) => (f >= 20 ? 1 : f + 1)), 110);
+    timer.current = window.setInterval(
+      () => setFrame((f) => (f >= totalFrames ? 1 : f + 1)),
+      110,
+    );
     return () => {
       if (timer.current) window.clearInterval(timer.current);
     };
-  }, [playing]);
+  }, [playing, totalFrames]);
+
+  // Reset frame to 1 when a new sequence arrives
+  useEffect(() => {
+    setFrame(1);
+  }, [sequence]);
 
   return (
     <section className="surface-card p-6">
@@ -42,18 +59,23 @@ export function KinematicPlayer({ sequence }: { sequence: Landmarks68[] }) {
               pointRadius={2.6}
             />
           </div>
+          {isSynthetic && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Synthetic preview — no recording yet.
+            </p>
+          )}
 
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Current frame</span>
               <span className="font-mono font-medium">
-                {String(frame).padStart(2, "0")} / 20
+                {String(frame).padStart(2, "0")} / {String(totalFrames).padStart(2, "0")}
               </span>
             </div>
             <input
               type="range"
               min={1}
-              max={20}
+              max={totalFrames}
               value={frame}
               onChange={(e) => {
                 setPlaying(false);
@@ -89,14 +111,16 @@ export function KinematicPlayer({ sequence }: { sequence: Landmarks68[] }) {
         </div>
 
         <dl className="grid content-start gap-2.5 text-sm">
-          {[
-            ["Sequence Length", "20 frames"],
-            ["Landmarks", "68"],
-            ["Coordinates", "2D"],
-            ["Normalization", "Bounding-box normalized"],
-            ["Representation", "(20, 68, 2)"],
-            ["Source", sequence.length === 20 ? "Captured this session" : "Demonstration sequence"],
-          ].map(([k, v]) => (
+          {(
+            [
+              ["Sequence Length", `${totalFrames} frames`],
+              ["Landmarks", "68"],
+              ["Coordinates", "2D"],
+              ["Normalization", "Bounding-box normalized"],
+              ["Representation", isSynthetic ? "(synthetic)" : `(${totalFrames}, 68, 2)`],
+              ["Source", isSynthetic ? "Demonstration sequence" : "Captured this session"],
+            ] as [string, string][]
+          ).map(([k, v]) => (
             <div key={k} className="flex items-center justify-between gap-3 rounded-lg border bg-surface px-4 py-3">
               <dt className="text-muted-foreground">{k}</dt>
               <dd className="font-mono font-medium">{v}</dd>
